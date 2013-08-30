@@ -9,5 +9,5 @@ setup(
     author_email='info@netangels.ru',
     url='https://panel.netangels.ru',
     packages=['forwarder'],
-    requires=['tornado']
+    install_requires=['tornado']
 )
