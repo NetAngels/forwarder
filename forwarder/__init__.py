@@ -4,7 +4,12 @@ import os
 import socket
 
 from tornado.iostream import IOStream
-from tornado.tcpserver import TCPServer
+try:
+    # tornado>=3.0
+    from tornado.tcpserver import TCPServer
+except ImportError:
+    # tornado<3.0
+    from tornado.netutil import TCPServer
 
 from forwarder.utils import DictDiff
 
