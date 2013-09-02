@@ -3,7 +3,7 @@ from distutils.core import setup
 
 setup(
     name='forwarder',
-    version='0.1.1',
+    version='0.1.2',
     description='TCP packages forwarder',
     author='NetAngels team',
     author_email='info@netangels.ru',
