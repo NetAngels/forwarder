@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import glob
 import logging
 import os
 import socket
@@ -19,7 +20,7 @@ class ForwardServer(TCPServer):
         super(ForwardServer, self).__init__(*args, **kwargs)
         self.conf = {}
         self._confpath = confpath
-        self._confmtime = 0
+        self._confpaths = {}
         # Словарь активных подключений. В роли ключа - пара (addr, port), которые слушает сервер.
         self._connections = []
         # Словарь дескрипторов, открытых для прослушивания сокетов.
@@ -40,23 +41,25 @@ class ForwardServer(TCPServer):
             127.0.0.1 8091    127.0.0.1 8080
         """
         conf = {}
-        with open(self._confpath) as f:
-            for line in f:
-                # Skip comment lines
-                if line.startswith('#'):
-                    continue
-                # Clear format
-                for i in (',', '=>', ':'):
-                    line = line.replace(i, '')
-                f_addr, f_port, t_addr, t_port = line.split()
-                conf[f_addr, int(f_port)] = t_addr, int(t_port)
+        for path in self._confpaths:
+            with open(path) as f:
+                for line in f:
+                    # Skip comment lines
+                    if line.startswith('#'):
+                        continue
+                    # Clear format
+                    for i in (',', '=>', ':'):
+                        line = line.replace(i, '')
+                    f_addr, f_port, t_addr, t_port = line.split()
+                    conf[f_addr, int(f_port)] = t_addr, int(t_port)
         return conf
 
     def bind_from_conf(self):
-        """ """
-        _confmtime = os.path.getmtime(self._confpath)
-        if self._confmtime != _confmtime:
-            self._confmtime = _confmtime
+        new_confpahts = {}
+        for path in glob.glob(self._confpath):
+            new_confpahts[path] = os.path.getmtime(path)
+        if new_confpahts != self._confpaths:
+            self._confpaths = new_confpahts
             new_conf = self.parse_conf()
             if self.conf != new_conf:
                 diff = DictDiff(self.conf, new_conf)
