@@ -58,7 +58,7 @@ class ForwardServer(TCPServer):
         new_confpahts = {}
         _confpath = self._confpath
         if os.path.isdir(self._confpath):
-            _confpath += os.path.join(_confpath, '*')
+            _confpath = os.path.join(_confpath, '*')
         for path in glob.iglob(_confpath):
             new_confpahts[path] = os.path.getmtime(path)
         if new_confpahts != self._confpaths:
