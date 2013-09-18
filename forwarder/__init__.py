@@ -49,16 +49,20 @@ class ForwardServer(TCPServer):
                         continue
                     # Clear format
                     for i in (',', '=>', ':'):
-                        line = line.replace(i, '')
+                        line = line.replace(i, ' ')
                     f_addr, f_port, t_addr, t_port = line.split()
                     conf[f_addr, int(f_port)] = t_addr, int(t_port)
         return conf
 
     def bind_from_conf(self):
         new_confpahts = {}
-        for path in glob.glob(self._confpath):
+        _confpath = self._confpath
+        if os.path.isdir(self._confpath):
+            _confpath += os.path.join(_confpath, '*')
+        for path in glob.iglob(_confpath):
             new_confpahts[path] = os.path.getmtime(path)
         if new_confpahts != self._confpaths:
+            logging.info("Configuration reload")
             self._confpaths = new_confpahts
             new_conf = self.parse_conf()
             if self.conf != new_conf:
@@ -71,9 +75,6 @@ class ForwardServer(TCPServer):
                 for addr, port in diff.added:
                     self.listen(port, addr)
                 self.conf = new_conf
-
-    def log_state(self):
-        logging.info("Connections: %s", len(self._connections))
 
     def add_sockets(self, sockets):
         super(ForwardServer, self).add_sockets(sockets)
@@ -89,8 +90,9 @@ class ForwardServer(TCPServer):
 
     def open_connection(self, stream, address):
         connection = ForwardConnection(self, stream, address)
-        #connection.set_close_callback(self.on_connection_closed)
         self._connections.append(connection)
+        connection.set_close_callback(self.on_connection_closed)
+        logging.info("Total connections: %s", len(self._connections))
 
     def on_connection_closed(self, connection):
         self._connections.remove(connection)
@@ -125,7 +127,8 @@ class ForwardConnection(object):
         self._close_callback = callback
 
     def _on_remote_connected(self):
-        logging.info('forward %r to %r', self.address, self.remote_address)
+        _args = self.reverse_address[0], self.address[0], self.address[1], self.remote_address[0], self.remote_address[1]
+        logging.info('Connected ip: %s, forward %s:%s => %s:%s', *_args)
         self.remote_stream.read_until_close(self._on_remote_read_close, self.stream.write)
         self.stream.read_until_close(self._on_read_close, self.remote_stream.write)
 
@@ -148,6 +151,6 @@ class ForwardConnection(object):
                 self.remote_stream.close()
 
     def _on_closed(self):
+        logging.info('Disconnected ip: %s', self.reverse_address[0])
         if self._close_callback:
             self._close_callback(self)
-        logging.info('Connection closed')
