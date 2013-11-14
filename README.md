@@ -1,4 +1,4 @@
-forwarder: Microsoft Translator API wrapper
+forwarder
 ===========================================
 
 После установки пакета в системе (через `pip` или через `dpkg`) становится доступен модуль `forwarder`.
