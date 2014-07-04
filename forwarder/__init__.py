@@ -21,21 +21,19 @@ class ForwardServer(TCPServer):
         self.conf = {}
         self._confpath = confpath
         self._confpaths = {}
-        # Словарь активных подключений. В роли ключа - пара (addr, port), которые слушает сервер.
-        self._connections = []
-        # Словарь дескрипторов, открытых для прослушивания сокетов.
-        # В роли ключа - пара (addr, port), которые слушает сервер.
-        self._fds = {}
+        self._connections = []  # List of server active connections. Each exposed by tuple (addr, port).
+        self._fds = {}  # List of sockets descriptors. Each exposed by tuple (addr, port).
 
     def parse_conf(self):
         """
-        Загружает и парсит конфиг из файла. Конфиг имеет следующий вид:
+        Loads and parses configuration file.
+        Configuration file follows such format:
 
-            # Строчки решеткой вначале - игнорируются, как комментарии.
-            # В каждой строчке должно быть 4 значения: адрес и порт, которые
-            # необходимо слушать и адрес и порт, на которые необходимо
-            # перенаправлять TCP пакеты.
-            # Значения могут разделяться символами: " ", ",", "=>" для наглядности:
+            # Lines with leading # character are comments.
+            # Each line must contain 4 values: addr and port of
+            # incoming connection and addr and port of forwarded connection
+            # Values must be separated by spaces, commas or arrow
+            # symbols (" ", ",", "=>")
             127.0.0.1 8089 => 127.0.0.1 8080
             127.0.0.1:8090, 127.0.0.1:8080
             127.0.0.1 8091    127.0.0.1 8080
@@ -104,7 +102,7 @@ class ForwardServer(TCPServer):
                 c.close()
 
     def handle_stream(self, stream, address):
-        # NB: adress - это обратный адрес TCP подключения
+        # NB: adress is a reverse TCP connection
         self.open_connection(stream, address)
 
 

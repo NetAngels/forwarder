@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 class cached_property(object):
     """
-    Декоратор, превращающий метод в кэшируемое свойство.
-    Скопировано из django.utils.functional.
+    Decorator that caches method value.
     """
     def __init__(self, func):
         self.func = func
@@ -14,7 +13,7 @@ class cached_property(object):
 
 class DictDiff(object):
     """
-    Считает разницу между двумя словарями, возвращая ее в виде сетов ключей.
+    Special structure that coumputes diff between 2 dicts.
     """
     def __init__(self, old, new):
         self.old, self.new = old, new
