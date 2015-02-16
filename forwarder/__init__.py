@@ -15,6 +15,18 @@ except ImportError:
 from forwarder.utils import DictDiff
 
 
+def _get_forwarding_str(addr_from, port_from, addr_to, port_to):
+    """
+    Returns log string for connection forwarding.
+    """
+    return "{addr_from}:{port_from} => {addr_to}:{port_to}".format(
+        addr_from=addr_from,
+        port_from=port_from,
+        addr_to=addr_to,
+        port_to=port_to
+    )
+
+
 class ForwardServer(TCPServer):
     def __init__(self, confpath, *args, **kwargs):
         super(ForwardServer, self).__init__(*args, **kwargs)
@@ -66,11 +78,17 @@ class ForwardServer(TCPServer):
             if self.conf != new_conf:
                 diff = DictDiff(self.conf, new_conf)
                 for addr, port in diff.removed:
+                    logging.info('Forwarding %s removed from config. Closing all connections on it.',
+                                 _get_forwarding_str(addr, port, *new_conf[(addr, port)]))
                     self.close_connections((addr, port))
                     self.unbind(port, addr)
                 for addr, port in diff.changed:
+                    logging.info('Forwarding %s was changed in config. Reinitialize all connections on it',
+                                 _get_forwarding_str(addr, port, *new_conf[(addr, port)]))
                     self.close_connections((addr, port))
                 for addr, port in diff.added:
+                    logging.info('New forwarding %s was added in config. Start listening on it',
+                                 _get_forwarding_str(addr, port, *new_conf[(addr, port)]))
                     self.listen(port, addr)
                 self.conf = new_conf
 
@@ -125,8 +143,10 @@ class ForwardConnection(object):
         self._close_callback = callback
 
     def _on_remote_connected(self):
-        _args = self.reverse_address[0], self.address[0], self.address[1], self.remote_address[0], self.remote_address[1]
-        logging.info('Connected ip: %s, forward %s:%s => %s:%s', *_args)
+        ip_from = self.reverse_address[0]
+        fwd_str = _get_forwarding_str(self.address[0], self.address[1],
+                                      self.remote_address[0], self.remote_address[1])
+        logging.info('Connected ip: %s, forward %s', ip_from, fwd_str)
         self.remote_stream.read_until_close(self._on_remote_read_close, self.stream.write)
         self.stream.read_until_close(self._on_read_close, self.remote_stream.write)
 
