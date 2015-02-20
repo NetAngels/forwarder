@@ -26,6 +26,7 @@ class ForwarderIntegrationTest(AsyncTestCase):
         self.echo_ioloop = IOLoop()
         self.echo_server = TCPEchoServer(io_loop=self.echo_ioloop)
         sock, self.echo_port = bind_unused_port()
+        sock.close()
         self.echo_server.listen(self.echo_port)
         self.echo_thread = threading.Thread(target=self.echo_ioloop.start)
         self.echo_thread.start()
