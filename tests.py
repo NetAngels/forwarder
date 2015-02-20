@@ -22,8 +22,6 @@ class ForwarderIntegrationTest(AsyncTestCase):
     def setUp(self):
         super(ForwarderIntegrationTest, self).setUp()
 
-        self.__timeout = 10
-
         # Set up echo TCP server
         self.echo_ioloop = IOLoop()
         self.echo_server = TCPEchoServer(io_loop=self.echo_ioloop)
@@ -37,7 +35,7 @@ class ForwarderIntegrationTest(AsyncTestCase):
         sock.close()
         self.confpath = tempfile.mkstemp()[1]
         with open(self.confpath, 'w') as f:
-            f.write('127.0.0.1:{} => 127.0.0.1:{}'.format(self.forwarder_port, self.echo_port))
+            f.write('127.0.0.1:{0} => 127.0.0.1:{1}'.format(self.forwarder_port, self.echo_port))
         self.forwarder_ioloop = IOLoop()
         self.forwarder_server = ForwardServer(confpath=self.confpath, io_loop=self.forwarder_ioloop)
         self.forwarder_server.bind_from_conf()
