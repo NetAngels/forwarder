@@ -5,13 +5,47 @@ import tempfile
 import threading
 from tornado.tcpserver import TCPServer
 from forwarder import ForwardServer
+from forwarder.utils import DictDiff
 from tornado.ioloop import IOLoop
-from tornado.testing import AsyncTestCase, bind_unused_port, gen_test
+from tornado.testing import AsyncTestCase, bind_unused_port, gen_test, unittest
 
 
 class TCPEchoServer(TCPServer):
     def handle_stream(self, stream, address):
         stream.read_until_close(lambda _: stream.close(), stream.write)
+
+
+class DictDiffTest(unittest.TestCase):
+    def setUp(self):
+        self.d1 = {
+            'a': 1,
+            'b': 2,
+            'c': 3,
+            'd': 4,
+        }
+        self.d2 = {
+            # removed 'a'
+            # changed valued of 'b'
+            'b': 10,
+            'c': 3,
+            'd': 4,
+            # added 'e'
+            'e': 5,
+        }
+        self.diff = DictDiff(self.d1, self.d2)
+
+    def test_added(self):
+        self.assertEqual(self.diff.added, set(['e']))
+
+    def test_removed(self):
+        self.assertEqual(self.diff.removed, set(['a']))
+
+    def test_changed(self):
+        self.assertEqual(self.diff.changed, set(['b']))
+
+    def test_unchanged(self):
+        self.assertEqual(self.diff.unchanged, set(['c', 'd']))
+
 
 
 class ForwarderIntegrationTest(AsyncTestCase):
