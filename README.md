@@ -1,17 +1,25 @@
 forwarder
 =========
 
-После установки пакета в системе (через `pip` или через `dpkg`) становится доступен модуль `forwarder`.
-Для запуска форвардера достаточно передать его `python`'у с параметром `-m` (выполнить модуль), доп. параметром указывается путь к конфигу/конфигам.
+A simple TCP packages forwarder. It redirects TCP trafic between specified pairs of host and port.
+It has a similar behaviour to a standard Linux `redir` utility.
 
+`Forwarder` config looks like:
+
+```
+127.0.0.1 8097 => 127.0.0.1 9098
+#127.0.0.1 8088 => 192.168.1.216 8080
+```
+
+A basic run looks like:
 ```
 python -m forwarder /etc/forwarder.d/main.conf
 ```
 
-`Forwarder` умеет автоматически читать конфиги по паттерну, т.е. можно в пути исопльзовать `*` и `?`:
+You can also use  `*` и `?` as mask for `forwarder's` config:
 
 ```
 python -m forwarder /etc/forwarder.d/*.conf
 ```
 
-При изменении, добавлении, удалении файлов, процесс автоматически перестает слушать изменившиеся порты, разрывает ненужные соединения.
+`Forwarder` automatically reloads configuration files and reinitializes/closes changed connections.
