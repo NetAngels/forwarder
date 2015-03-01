@@ -1,7 +1,8 @@
 forwarder
 =========
 
-A simple TCP packages forwarder. It redirects TCP trafic between specified pairs of host and port.
+A simple TCP packages forwarder built on top of python `tornado` framework.
+It redirects TCP trafic between specified pairs of host and port.
 It has a similar behaviour to a standard Linux `redir` utility.
 
 `Forwarder` config looks like:
