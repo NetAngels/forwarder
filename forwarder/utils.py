@@ -16,8 +16,10 @@ class DictDiff(object):
     Special structure that coumputes diff between 2 dicts.
     """
     def __init__(self, old, new):
-        self.old, self.new = old, new
-        self.set_old, self.set_new = set(new.iterkeys()), set(old.iterkeys())
+        self.old = old
+        self.new = new
+        self.set_old = set(new.keys())
+        self.set_new = set(old.keys())
         self.intersect = self.set_old & self.set_new
 
     @cached_property
