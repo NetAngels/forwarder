@@ -99,6 +99,6 @@ class ForwarderIntegrationTest(AsyncTestCase):
     def test_ping(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect(('localhost', self.forwarder_port))
-        sock.sendall('Hello world!')
+        sock.sendall(b'Hello world!')
         data = sock.recv(1024)
-        self.assertEqual(data, 'Hello world!')
+        self.assertEqual(data, b'Hello world!')
