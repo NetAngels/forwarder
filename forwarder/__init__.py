@@ -4,6 +4,7 @@ import logging
 import os
 import socket
 
+from tornado.ioloop import PeriodicCallback
 from tornado.iostream import IOStream
 try:
     # tornado>=3.0
@@ -28,18 +29,47 @@ def _get_forwarding_str(addr_from, port_from, addr_to, port_to):
 
 
 class ForwardServer(TCPServer):
-    def __init__(self, confpath, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super(ForwardServer, self).__init__(*args, **kwargs)
         self.conf = {}
-        self._confpath = confpath
-        self._confpaths = {}
+        self._config_file = None
+        self._config_files_mtime_cache = {}
         self._connections = []  # List of server active connections. Each exposed by tuple (addr, port).
         self._fds = {}  # List of sockets descriptors. Each exposed by tuple (addr, port).
+        self._config_reload_callback = None
 
-    def parse_conf(self):
+    def bind_from_config_file(self, config_file, autoreload=True):
         """
-        Loads and parses configuration file.
-        Configuration file follows such format:
+        Sets `Forwarder` instance config file and binds config from it.
+        Checks for configuration file changes and applies them if `autoreload`
+        parameter is True.
+        """
+        self._config_file = config_file
+        self._handle_config_reload()
+        if autoreload:
+            self._config_reload_callback = PeriodicCallback(self._handle_config_reload, 500)
+            self._config_reload_callback.start()
+
+    def _handle_config_reload(self):
+        """
+        Reloads config files and binds parsed configuration.
+        """
+        config_files_mtime = {}
+        config_file = self._config_file
+        if os.path.isdir(self._config_file):
+            config_file = os.path.join(config_file, '*')
+        for path in glob.iglob(config_file):
+            config_files_mtime[path] = os.path.getmtime(path)
+        if config_files_mtime != self._config_files_mtime_cache:
+            logging.info("Configuration reload")
+            config_files = config_files_mtime.keys()
+            conf = self.parse_config_files(config_files)
+            self.bind_conf(conf)
+
+    def parse_config_files(self, config_files):
+        """
+        Loads and parses configuration files list.
+        Each configuration file follows such format:
 
             # Lines with leading # character are comments.
             # Each line must contain 4 values: addr and port of
@@ -51,7 +81,7 @@ class ForwardServer(TCPServer):
             127.0.0.1 8091    127.0.0.1 8080
         """
         conf = {}
-        for path in self._confpaths:
+        for path in config_files:
             with open(path) as f:
                 for line in f:
                     # Skip comment lines
@@ -64,33 +94,27 @@ class ForwardServer(TCPServer):
                     conf[f_addr, int(f_port)] = t_addr, int(t_port)
         return conf
 
-    def bind_from_conf(self):
-        new_confpahts = {}
-        _confpath = self._confpath
-        if os.path.isdir(self._confpath):
-            _confpath = os.path.join(_confpath, '*')
-        for path in glob.iglob(_confpath):
-            new_confpahts[path] = os.path.getmtime(path)
-        if new_confpahts != self._confpaths:
-            logging.info("Configuration reload")
-            self._confpaths = new_confpahts
-            new_conf = self.parse_conf()
-            if self.conf != new_conf:
-                diff = DictDiff(self.conf, new_conf)
-                for addr, port in diff.removed:
-                    logging.info('Forwarding %s removed from config. Closing all connections on it.',
-                                 _get_forwarding_str(addr, port, *new_conf[(addr, port)]))
-                    self.close_connections((addr, port))
-                    self.unbind(port, addr)
-                for addr, port in diff.changed:
-                    logging.info('Forwarding %s was changed in config. Reinitialize all connections on it',
-                                 _get_forwarding_str(addr, port, *new_conf[(addr, port)]))
-                    self.close_connections((addr, port))
-                for addr, port in diff.added:
-                    logging.info('New forwarding %s was added in config. Start listening on it',
-                                 _get_forwarding_str(addr, port, *new_conf[(addr, port)]))
-                    self.listen(port, addr)
-                self.conf = new_conf
+    def bind_conf(self, conf):
+        """
+        Binds new added sockets, restarts changed and closes removed
+        from new configuration dictionary.
+        """
+        if self.conf != conf:
+            diff = DictDiff(self.conf, conf)
+            for addr, port in diff.removed:
+                logging.info('Forwarding %s removed from config. Closing all connections on it.',
+                             _get_forwarding_str(addr, port, *conf[(addr, port)]))
+                self.close_connections((addr, port))
+                self.unbind(port, addr)
+            for addr, port in diff.changed:
+                logging.info('Forwarding %s was changed in config. Reinitialize all connections on it',
+                             _get_forwarding_str(addr, port, *conf[(addr, port)]))
+                self.close_connections((addr, port))
+            for addr, port in diff.added:
+                logging.info('New forwarding %s was added in config. Start listening on it',
+                             _get_forwarding_str(addr, port, *conf[(addr, port)]))
+                self.listen(port, addr)
+            self.conf = conf
 
     def add_sockets(self, sockets):
         super(ForwardServer, self).add_sockets(sockets)

@@ -68,12 +68,12 @@ class ForwarderIntegrationTest(AsyncTestCase):
         # Set up forwarder
         sock, self.forwarder_port = bind_unused_port()
         sock.close()
-        self.confpath = tempfile.mkstemp()[1]
-        with open(self.confpath, 'w') as f:
+        self.config_file = tempfile.mkstemp()[1]
+        with open(self.config_file, 'w') as f:
             f.write('127.0.0.1:{0} => 127.0.0.1:{1}'.format(self.forwarder_port, self.echo_port))
         self.forwarder_ioloop = IOLoop()
-        self.forwarder_server = ForwardServer(confpath=self.confpath, io_loop=self.forwarder_ioloop)
-        self.forwarder_server.bind_from_conf()
+        self.forwarder_server = ForwardServer(io_loop=self.forwarder_ioloop)
+        self.forwarder_server.bind_from_config_file(self.config_file)
 
         self.forwarder_thread = threading.Thread(target=self.forwarder_ioloop.start)
         self.forwarder_thread.start()
@@ -85,7 +85,7 @@ class ForwarderIntegrationTest(AsyncTestCase):
         self.forwarder_ioloop.add_callback(stop_forwarder)
         self.forwarder_thread.join()
         self.forwarder_ioloop.close(all_fds=True)
-        os.remove(self.confpath)
+        os.remove(self.config_file)
 
         def stop_echo_server():
             self.echo_server.stop()
