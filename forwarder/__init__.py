@@ -6,6 +6,7 @@ import socket
 
 from tornado.ioloop import PeriodicCallback
 from tornado.iostream import IOStream
+from tornado.util import basestring_type
 try:
     # tornado>=3.0
     from tornado.tcpserver import TCPServer
@@ -84,7 +85,7 @@ class ForwardServer(TCPServer):
             127.0.0.1 8091    127.0.0.1 8080
         """
         conf = {}
-        if isinstance(config_data, basestring):
+        if isinstance(config_data, basestring_type):
             config_data = config_data.split('\n')
         for line in config_data:
             # Skip blank lines or commented lines
