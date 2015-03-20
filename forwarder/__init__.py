@@ -63,10 +63,13 @@ class ForwardServer(TCPServer):
         if config_files_mtime != self._config_files_mtime_cache:
             logging.info("Configuration reload")
             config_files = config_files_mtime.keys()
-            conf = self.parse_config_files(config_files)
-            self.bind_conf(conf)
+            config = {}
+            for path in config_files:
+                with open(path) as f:
+                    config.update(self.parse_config(f))
+            self.bind_conf(config)
 
-    def parse_config_files(self, config_files):
+    def parse_config(self, config_data):
         """
         Loads and parses configuration files list.
         Each configuration file follows such format:
@@ -81,17 +84,17 @@ class ForwardServer(TCPServer):
             127.0.0.1 8091    127.0.0.1 8080
         """
         conf = {}
-        for path in config_files:
-            with open(path) as f:
-                for line in f:
-                    # Skip comment lines
-                    if line.startswith('#'):
-                        continue
-                    # Clear format
-                    for i in (',', '=>', ':'):
-                        line = line.replace(i, ' ')
-                    f_addr, f_port, t_addr, t_port = line.split()
-                    conf[f_addr, int(f_port)] = t_addr, int(t_port)
+        if isinstance(config_data, basestring):
+            config_data = config_data.split('\n')
+        for line in config_data:
+            # Skip blank lines or commented lines
+            if not line or line.startswith('#'):
+                continue
+            # Clear format
+            for i in (',', '=>', ':'):
+                line = line.replace(i, ' ')
+            f_addr, f_port, t_addr, t_port = line.split()
+            conf[f_addr, int(f_port)] = t_addr, int(t_port)
         return conf
 
     def bind_conf(self, conf):
@@ -103,7 +106,7 @@ class ForwardServer(TCPServer):
             diff = DictDiff(self.conf, conf)
             for addr, port in diff.removed:
                 logging.info('Forwarding %s removed from config. Closing all connections on it.',
-                             _get_forwarding_str(addr, port, *conf[(addr, port)]))
+                             _get_forwarding_str(addr, port, *self.conf[(addr, port)]))
                 self.close_connections((addr, port))
                 self.unbind(port, addr)
             for addr, port in diff.changed:
