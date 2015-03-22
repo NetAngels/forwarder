@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging
-import sys
 
-from tornado import ioloop
 from tornado.options import options
 
 from forwarder import ForwardServer
@@ -17,7 +15,7 @@ def main():
     options.define('keyfile', help="Path to SSL key to enable TSL")
     unparsed = options.parse_command_line()
     if len(unparsed) == 1:
-        confpath = options.parse_command_line()[0]
+        config_file = options.parse_command_line()[0]
     else:
         raise ValueError("Configuration file is not specified")
     if options.certfile and options.keyfile:
@@ -27,10 +25,8 @@ def main():
         }
     else:
         ssl_options = None
-    server = ForwardServer(confpath, ssl_options=ssl_options)
-    server.bind_from_conf()
-    ioloop.PeriodicCallback(server.bind_from_conf, 500).start()
-    ioloop.IOLoop.instance().start()
+    server = ForwardServer(ssl_options=ssl_options)
+    server.bind_from_config_file(config_file)
 
 
 if __name__ == '__main__':
