@@ -62,6 +62,7 @@ class ForwardServer(TCPServer):
         for path in glob.iglob(config_file):
             config_files_mtime[path] = os.path.getmtime(path)
         if config_files_mtime != self._config_files_mtime_cache:
+            self._config_files_mtime_cache = config_files_mtime
             logging.info("Configuration reload")
             config_files = config_files_mtime.keys()
             config = {}
