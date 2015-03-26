@@ -61,15 +61,21 @@ class ForwarderConfigTest(unittest.TestCase):
         self.assertEqual("1.2.3.4:21 => 5.6.7.8:22", s)
 
     def test_parse_config_files(self):
-        self.config_file = tempfile.mkstemp()[1]
-        with open(self.config_file, 'w') as f:
-            f.write('127.0.0.1:5000 => 127.0.0.1:5001')
-            f.write('127.0.0.1:5002, 127.0.0.1:5003')
-            f.write('#127.0.0.1:5004 => 127.0.0.1:5005')
-            f.write('127.0.0.1:5006    127.0.0.1:5007')
+        config_file = tempfile.mkstemp(TEST_FILE_SUFFIX)[1]
+        with open(config_file, 'w') as f:
+            f.write('127.0.0.1:5000 => 127.0.0.1:5001\n')
+            f.write('127.0.0.1:5002, 127.0.0.1:5003\n')
+            f.write('#127.0.0.1:5004 => 127.0.0.1:5005\n')
+            f.write('127.0.0.1:5006    127.0.0.1:5007\n')
+        with open(config_file, 'r') as f:
+            conf = {
+                ('127.0.0.1', 5000): ('127.0.0.1', 5001),
+                ('127.0.0.1', 5002): ('127.0.0.1', 5003),
+                ('127.0.0.1', 5006): ('127.0.0.1', 5007),
+            }
+            parsedconf = self.forwarder_server.parse_config(f)
+            self.assertEqual(parsedconf, conf)
 
-        #
-        pass
 
     def test_parse_config_string(self):
         data = '''
