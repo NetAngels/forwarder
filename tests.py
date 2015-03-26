@@ -12,6 +12,8 @@ from tornado.testing import AsyncTestCase, bind_unused_port, gen_test, unittest
 from forwarder import ForwardServer, _get_forwarding_str
 from forwarder.utils import DictDiff
 
+TEST_FILE_SUFFIX = '_fwdtest'
+
 
 class TCPEchoServer(TCPServer):
     def handle_stream(self, stream, address):
@@ -143,7 +145,7 @@ class ForwarderIntegrationTest(AsyncTestCase):
         # Set up forwarder
         sock, self.forwarder_port = bind_unused_port()
         sock.close()
-        self.config_file = tempfile.mkstemp()[1]
+        self.config_file = tempfile.mkstemp(TEST_FILE_SUFFIX)[1]
         with open(self.config_file, 'w') as f:
             f.write('127.0.0.1:{0} => 127.0.0.1:{1}'.format(self.forwarder_port, self.echo_port))
         self.forwarder_ioloop = IOLoop()
