@@ -76,7 +76,6 @@ class ForwarderConfigTest(unittest.TestCase):
             parsedconf = self.forwarder_server.parse_config(f)
             self.assertEqual(parsedconf, conf)
 
-
     def test_parse_config_string(self):
         data = '''
 127.0.0.1:5000 => 127.0.0.1:5001
@@ -92,6 +91,38 @@ class ForwarderConfigTest(unittest.TestCase):
         }
         parsedconf = self.forwarder_server.parse_config(data)
         self.assertEqual(parsedconf, conf)
+
+    def test_handle_config_reload(self):
+        with mock.patch.object(self.forwarder_server, 'bind_conf') as bind_conf:
+            d = tempfile.mkdtemp(TEST_FILE_SUFFIX)
+            with open(os.path.join(d, '0.conf'), 'w') as f:
+                f.write('127.0.0.1:5000 => 127.0.0.1:5001\n')
+            with open(os.path.join(d, '2.conf'), 'w') as f:
+                f.write('127.0.0.1:5002 => 127.0.0.1:5003\n')
+            conf = {
+                ('127.0.0.1', 5000): ('127.0.0.1', 5001),
+                ('127.0.0.1', 5002): ('127.0.0.1', 5003),
+            }
+
+            self.forwarder_server._config_file = os.path.join(d, '*')
+            self.forwarder_server._handle_config_reload()
+            self.assertEqual(bind_conf.call_count, 1)
+            self.assertEqual(bind_conf.call_args, mock.call(conf))
+
+            self.forwarder_server._handle_config_reload()
+            self.assertEqual(bind_conf.call_count, 1)
+
+            with open(os.path.join(d, '3.conf'), 'w') as f:
+                f.write('127.0.0.1:5004 => 127.0.0.1:5005\n')
+            conf = {
+                ('127.0.0.1', 5000): ('127.0.0.1', 5001),
+                ('127.0.0.1', 5002): ('127.0.0.1', 5003),
+                ('127.0.0.1', 5004): ('127.0.0.1', 5005),
+            }
+
+            self.forwarder_server._handle_config_reload()
+            self.assertEqual(bind_conf.call_count, 2)
+            self.assertEqual(bind_conf.call_args, mock.call(conf))
 
     def test_bind_conf(self):
         with mock.patch.multiple(self.forwarder_server, close_connections=mock.DEFAULT,
