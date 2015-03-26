@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import logging
 
+from tornado.ioloop import IOLoop
 from tornado.options import options
 
 from forwarder import ForwardServer
@@ -27,6 +28,7 @@ def main():
         ssl_options = None
     server = ForwardServer(ssl_options=ssl_options)
     server.bind_from_config_file(config_file)
+    IOLoop.instance().start()
 
 
 if __name__ == '__main__':
