@@ -9,7 +9,7 @@ from tornado.ioloop import IOLoop
 from tornado.tcpserver import TCPServer
 from tornado.testing import AsyncTestCase, bind_unused_port, gen_test, unittest
 
-from forwarder import ForwardServer, _get_forwarding_str
+from forwarder import ForwardServer, _get_forwarding_str, ParseError
 from forwarder.utils import DictDiff
 
 TEST_FILE_SUFFIX = '_fwdtest'
@@ -67,14 +67,13 @@ class ForwarderConfigTest(unittest.TestCase):
             f.write('127.0.0.1:5002, 127.0.0.1:5003\n')
             f.write('#127.0.0.1:5004 => 127.0.0.1:5005\n')
             f.write('127.0.0.1:5006    127.0.0.1:5007\n')
-        with open(config_file, 'r') as f:
-            conf = {
-                ('127.0.0.1', 5000): ('127.0.0.1', 5001),
-                ('127.0.0.1', 5002): ('127.0.0.1', 5003),
-                ('127.0.0.1', 5006): ('127.0.0.1', 5007),
-            }
-            parsedconf = self.forwarder_server.parse_config(f)
-            self.assertEqual(parsedconf, conf)
+        conf = {
+            ('127.0.0.1', 5000): ('127.0.0.1', 5001),
+            ('127.0.0.1', 5002): ('127.0.0.1', 5003),
+            ('127.0.0.1', 5006): ('127.0.0.1', 5007),
+        }
+        parsedconf = self.forwarder_server.parse_config(filename=config_file)
+        self.assertEqual(parsedconf, conf)
 
     def test_parse_config_string(self):
         data = '''
@@ -89,8 +88,16 @@ class ForwarderConfigTest(unittest.TestCase):
             ('127.0.0.1', 5002): ('127.0.0.1', 5003),
             ('127.0.0.1', 5006): ('127.0.0.1', 5007),
         }
-        parsedconf = self.forwarder_server.parse_config(data)
+        parsedconf = self.forwarder_server.parse_config(data=data)
         self.assertEqual(parsedconf, conf)
+
+    def test_parse_config_fails(self):
+        data = '''
+127.0.0.1:5000 => 127.0.0.1:5001
+bad config
+127.0.0.1:5002 => 127.0.0.1:5001
+'''
+        self.assertRaises(ParseError, self.forwarder_server.parse_config, data=data)
 
     def test_handle_config_reload(self):
         with mock.patch.object(self.forwarder_server, 'bind_conf') as bind_conf:
@@ -122,6 +129,23 @@ class ForwarderConfigTest(unittest.TestCase):
 
             self.forwarder_server._handle_config_reload()
             self.assertEqual(bind_conf.call_count, 2)
+            self.assertEqual(bind_conf.call_args, mock.call(conf))
+
+    def test_handle_config_reload_dir(self):
+        with mock.patch.object(self.forwarder_server, 'bind_conf') as bind_conf:
+            d = tempfile.mkdtemp(TEST_FILE_SUFFIX)
+            with open(os.path.join(d, '0.conf'), 'w') as f:
+                f.write('127.0.0.1:5000 => 127.0.0.1:5001\n')
+            with open(os.path.join(d, '1.conf'), 'w') as f:
+                f.write('127.0.0.1:5002 => 127.0.0.1:5003\n')
+            conf = {
+                ('127.0.0.1', 5000): ('127.0.0.1', 5001),
+                ('127.0.0.1', 5002): ('127.0.0.1', 5003),
+            }
+
+            self.forwarder_server._config_file = d
+            self.forwarder_server._handle_config_reload()
+            self.assertEqual(bind_conf.call_count, 1)
             self.assertEqual(bind_conf.call_args, mock.call(conf))
 
     def test_bind_conf(self):
