@@ -29,6 +29,13 @@ def _get_forwarding_str(addr_from, port_from, addr_to, port_to):
     )
 
 
+class ParseError(SyntaxError):
+    def __init__(self, messsage, filename=None, lineno=None):
+        self.filename = filename
+        self.lineno = lineno
+        super(ParseError, self).__init__(messsage)
+
+
 class ForwardServer(TCPServer):
     def __init__(self, *args, **kwargs):
         super(ForwardServer, self).__init__(*args, **kwargs)
@@ -67,11 +74,10 @@ class ForwardServer(TCPServer):
             config_files = config_files_mtime.keys()
             config = {}
             for path in config_files:
-                with open(path) as f:
-                    config.update(self.parse_config(f))
+                config.update(self.parse_config(filename=path))
             self.bind_conf(config)
 
-    def parse_config(self, config_data):
+    def parse_config(self, data='', filename=''):
         """
         Loads and parses configuration files list.
         Each configuration file follows such format:
@@ -85,18 +91,31 @@ class ForwardServer(TCPServer):
             127.0.0.1:8090, 127.0.0.1:8080
             127.0.0.1 8091    127.0.0.1 8080
         """
+        if all([data, filename]):
+            raise ValueError('Parameters are exclusive each other')
+        if not any([data, filename]):
+            raise ValueError('No data or file specified')
+        if filename:
+            with open(filename) as f:
+                data = f.read()
+        if isinstance(data, basestring_type):
+            data = data.splitlines()
+        else:
+            data = data
+
         conf = {}
-        if isinstance(config_data, basestring_type):
-            config_data = config_data.split('\n')
-        for line in config_data:
+        for lineno, line in enumerate(data):
             # Skip blank lines or commented lines
             if not line or line.startswith('#'):
                 continue
-            # Clear format
-            for i in (',', '=>', ':'):
-                line = line.replace(i, ' ')
-            f_addr, f_port, t_addr, t_port = line.split()
-            conf[f_addr, int(f_port)] = t_addr, int(t_port)
+            try:
+                # Clear format
+                for i in (',', '=>', ':'):
+                    line = line.replace(i, ' ')
+                f_addr, f_port, t_addr, t_port = line.split()
+                conf[f_addr, int(f_port)] = t_addr, int(t_port)
+            except ValueError:
+                raise ParseError('Failed to parse config line: `{0}`'.format(line), filename, lineno+1)
         return conf
 
     def bind_conf(self, conf):
