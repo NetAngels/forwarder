@@ -99,91 +99,88 @@ bad config
 '''
         self.assertRaises(ParseError, self.forwarder_server.parse_config, data=data)
 
-    def test_handle_config_reload(self):
-        with mock.patch.object(self.forwarder_server, 'bind_conf') as bind_conf:
-            d = tempfile.mkdtemp(TEST_FILE_SUFFIX)
-            with open(os.path.join(d, '0.conf'), 'w') as f:
-                f.write('127.0.0.1:5000 => 127.0.0.1:5001\n')
-            with open(os.path.join(d, '2.conf'), 'w') as f:
-                f.write('127.0.0.1:5002 => 127.0.0.1:5003\n')
-            conf = {
-                ('127.0.0.1', 5000): ('127.0.0.1', 5001),
-                ('127.0.0.1', 5002): ('127.0.0.1', 5003),
-            }
+    @mock.patch('forwarder.ForwardServer.bind_conf')
+    def test_handle_config_reload(self, bind_conf):
+        d = tempfile.mkdtemp(TEST_FILE_SUFFIX)
+        with open(os.path.join(d, '0.conf'), 'w') as f:
+            f.write('127.0.0.1:5000 => 127.0.0.1:5001\n')
+        with open(os.path.join(d, '2.conf'), 'w') as f:
+            f.write('127.0.0.1:5002 => 127.0.0.1:5003\n')
+        conf = {
+            ('127.0.0.1', 5000): ('127.0.0.1', 5001),
+            ('127.0.0.1', 5002): ('127.0.0.1', 5003),
+        }
 
-            self.forwarder_server._config_file = os.path.join(d, '*')
-            self.forwarder_server._handle_config_reload()
-            self.assertEqual(bind_conf.call_count, 1)
-            self.assertEqual(bind_conf.call_args, mock.call(conf))
+        self.forwarder_server._config_file = os.path.join(d, '*')
+        self.forwarder_server._handle_config_reload()
+        self.assertEqual(bind_conf.call_count, 1)
+        self.assertEqual(bind_conf.call_args, mock.call(conf))
 
-            self.forwarder_server._handle_config_reload()
-            self.assertEqual(bind_conf.call_count, 1)
+        self.forwarder_server._handle_config_reload()
+        self.assertEqual(bind_conf.call_count, 1)
 
-            with open(os.path.join(d, '3.conf'), 'w') as f:
-                f.write('127.0.0.1:5004 => 127.0.0.1:5005\n')
-            conf = {
-                ('127.0.0.1', 5000): ('127.0.0.1', 5001),
-                ('127.0.0.1', 5002): ('127.0.0.1', 5003),
-                ('127.0.0.1', 5004): ('127.0.0.1', 5005),
-            }
+        with open(os.path.join(d, '3.conf'), 'w') as f:
+            f.write('127.0.0.1:5004 => 127.0.0.1:5005\n')
+        conf = {
+            ('127.0.0.1', 5000): ('127.0.0.1', 5001),
+            ('127.0.0.1', 5002): ('127.0.0.1', 5003),
+            ('127.0.0.1', 5004): ('127.0.0.1', 5005),
+        }
 
-            self.forwarder_server._handle_config_reload()
-            self.assertEqual(bind_conf.call_count, 2)
-            self.assertEqual(bind_conf.call_args, mock.call(conf))
+        self.forwarder_server._handle_config_reload()
+        self.assertEqual(bind_conf.call_count, 2)
+        self.assertEqual(bind_conf.call_args, mock.call(conf))
 
-    def test_handle_config_reload_dir(self):
-        with mock.patch.object(self.forwarder_server, 'bind_conf') as bind_conf:
-            d = tempfile.mkdtemp(TEST_FILE_SUFFIX)
-            with open(os.path.join(d, '0.conf'), 'w') as f:
-                f.write('127.0.0.1:5000 => 127.0.0.1:5001\n')
-            with open(os.path.join(d, '1.conf'), 'w') as f:
-                f.write('127.0.0.1:5002 => 127.0.0.1:5003\n')
-            conf = {
-                ('127.0.0.1', 5000): ('127.0.0.1', 5001),
-                ('127.0.0.1', 5002): ('127.0.0.1', 5003),
-            }
+    @mock.patch('forwarder.ForwardServer.bind_conf')
+    def test_handle_config_reload_dir(self, bind_conf):
+        d = tempfile.mkdtemp(TEST_FILE_SUFFIX)
+        with open(os.path.join(d, '0.conf'), 'w') as f:
+            f.write('127.0.0.1:5000 => 127.0.0.1:5001\n')
+        with open(os.path.join(d, '1.conf'), 'w') as f:
+            f.write('127.0.0.1:5002 => 127.0.0.1:5003\n')
+        conf = {
+            ('127.0.0.1', 5000): ('127.0.0.1', 5001),
+            ('127.0.0.1', 5002): ('127.0.0.1', 5003),
+        }
 
-            self.forwarder_server._config_file = d
-            self.forwarder_server._handle_config_reload()
-            self.assertEqual(bind_conf.call_count, 1)
-            self.assertEqual(bind_conf.call_args, mock.call(conf))
+        self.forwarder_server._config_file = d
+        self.forwarder_server._handle_config_reload()
+        self.assertEqual(bind_conf.call_count, 1)
+        self.assertEqual(bind_conf.call_args, mock.call(conf))
 
-    def test_bind_conf(self):
-        with mock.patch.multiple(self.forwarder_server, close_connections=mock.DEFAULT,
-                                 listen=mock.DEFAULT, unbind=mock.DEFAULT) as values:
-            close_connections = values['close_connections']
-            listen = values['listen']
-            unbind = values['unbind']
+    @mock.patch('forwarder.ForwardServer.unbind')
+    @mock.patch('forwarder.ForwardServer.listen')
+    @mock.patch('forwarder.ForwardServer.close_connections')
+    def test_bind_conf(self, close_connections, listen, unbind):
+        first_conf = {
+            ('127.0.0.1', 5000): ('127.0.0.1', 5001),
+            ('127.0.0.1', 5002): ('127.0.0.1', 5003),
+        }
+        self.forwarder_server.bind_conf(first_conf)
+        self.assertEqual(self.forwarder_server.conf, first_conf)
+        self.assertEqual(close_connections.call_count, 0)
+        self.assertEqual(listen.call_count, 2)
+        self.assertIn(mock.call(5000, '127.0.0.1'), listen.call_args_list)
+        self.assertIn(mock.call(5002, '127.0.0.1'), listen.call_args_list)
+        self.assertEqual(unbind.call_count, 0)
 
-            first_conf = {
-                ('127.0.0.1', 5000): ('127.0.0.1', 5001),
-                ('127.0.0.1', 5002): ('127.0.0.1', 5003),
-            }
-            self.forwarder_server.bind_conf(first_conf)
-            self.assertEqual(self.forwarder_server.conf, first_conf)
-            self.assertEqual(close_connections.call_count, 0)
-            self.assertEqual(listen.call_count, 2)
-            self.assertIn(mock.call(5000, '127.0.0.1'), listen.call_args_list)
-            self.assertIn(mock.call(5002, '127.0.0.1'), listen.call_args_list)
-            self.assertEqual(unbind.call_count, 0)
-
-            close_connections.reset_mock()
-            listen.reset_mock()
-            unbind.reset_mock()
-            second_conf = {
-                # ('127.0.0.1', 5000): ('127.0.0.1', 5001), This one is removed from conf
-                ('127.0.0.1', 5002): ('127.0.0.1', 5005),  # This one is changed
-                ('127.0.0.1', 5006): ('127.0.0.1', 5007),  # This one is new added
-            }
-            self.forwarder_server.bind_conf(second_conf)
-            self.assertEqual(self.forwarder_server.conf, second_conf)
-            self.assertEqual(close_connections.call_count, 2)
-            self.assertIn(mock.call(('127.0.0.1', 5000)), close_connections.call_args_list)
-            self.assertIn(mock.call(('127.0.0.1', 5002)), close_connections.call_args_list)
-            self.assertEqual(listen.call_count, 1)
-            self.assertEqual(mock.call(5006, '127.0.0.1'), listen.call_args)
-            self.assertEqual(unbind.call_count, 1)
-            self.assertEqual(mock.call(5000, '127.0.0.1'), unbind.call_args)
+        close_connections.reset_mock()
+        listen.reset_mock()
+        unbind.reset_mock()
+        second_conf = {
+            # ('127.0.0.1', 5000): ('127.0.0.1', 5001), This one is removed from conf
+            ('127.0.0.1', 5002): ('127.0.0.1', 5005),  # This one is changed
+            ('127.0.0.1', 5006): ('127.0.0.1', 5007),  # This one is new added
+        }
+        self.forwarder_server.bind_conf(second_conf)
+        self.assertEqual(self.forwarder_server.conf, second_conf)
+        self.assertEqual(close_connections.call_count, 2)
+        self.assertIn(mock.call(('127.0.0.1', 5000)), close_connections.call_args_list)
+        self.assertIn(mock.call(('127.0.0.1', 5002)), close_connections.call_args_list)
+        self.assertEqual(listen.call_count, 1)
+        self.assertEqual(mock.call(5006, '127.0.0.1'), listen.call_args)
+        self.assertEqual(unbind.call_count, 1)
+        self.assertEqual(mock.call(5000, '127.0.0.1'), unbind.call_args)
 
 
 class ForwarderIntegrationTest(AsyncTestCase):
