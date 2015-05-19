@@ -220,3 +220,9 @@ class ForwarderIntegrationTest(AsyncTestCase):
             stream.write(b'Hello')
             data = yield stream.read_bytes(5)
             self.assertEqual(data, b'Hello')
+
+    def test_config_reloaded(self):
+        with mock.patch.object(self.forwarder_server._config_reload_callback, 'callback') as callback:
+            self.io_loop.call_later(1, self.stop)
+            self.wait()
+            self.assertTrue(callback.called)
