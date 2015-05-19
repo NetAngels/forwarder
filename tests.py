@@ -1,23 +1,17 @@
 # -*- coding: utf-8 -*-
+from contextlib import closing
 import mock
 import os
-import socket
 import tempfile
-import threading
 
-from tornado.ioloop import IOLoop
+from tornado.tcpclient import TCPClient
 from tornado.tcpserver import TCPServer
-from tornado.testing import AsyncTestCase, bind_unused_port, gen_test, unittest
+from tornado.testing import AsyncTestCase, bind_unused_port, unittest, gen_test
 
 from forwarder import ForwardServer, _get_forwarding_str, ParseError
 from forwarder.utils import DictDiff
 
 TEST_FILE_SUFFIX = '_fwdtest'
-
-
-class TCPEchoServer(TCPServer):
-    def handle_stream(self, stream, address):
-        stream.read_until_close(lambda _: stream.close(), stream.write)
 
 
 class DictDiffTest(unittest.TestCase):
@@ -183,6 +177,11 @@ bad config
         self.assertEqual(mock.call(5000, '127.0.0.1'), unbind.call_args)
 
 
+class TCPEchoServer(TCPServer):
+    def handle_stream(self, stream, address):
+        stream.read_until_close(lambda _: stream.close(), stream.write)
+
+
 class ForwarderIntegrationTest(AsyncTestCase):
     """
     We set up a simple TCP echo server, and test that data
@@ -191,14 +190,13 @@ class ForwarderIntegrationTest(AsyncTestCase):
     def setUp(self):
         super(ForwarderIntegrationTest, self).setUp()
 
+        self.client = TCPClient()
+
         # Set up echo TCP server
-        self.echo_ioloop = IOLoop()
-        self.echo_server = TCPEchoServer(io_loop=self.echo_ioloop)
+        self.echo_server = TCPEchoServer()
         sock, self.echo_port = bind_unused_port()
         sock.close()
         self.echo_server.listen(self.echo_port)
-        self.echo_thread = threading.Thread(target=self.echo_ioloop.start)
-        self.echo_thread.start()
 
         # Set up forwarder
         sock, self.forwarder_port = bind_unused_port()
@@ -206,34 +204,25 @@ class ForwarderIntegrationTest(AsyncTestCase):
         self.config_file = tempfile.mkstemp(TEST_FILE_SUFFIX)[1]
         with open(self.config_file, 'w') as f:
             f.write('127.0.0.1:{0} => 127.0.0.1:{1}'.format(self.forwarder_port, self.echo_port))
-        self.forwarder_ioloop = IOLoop()
-        self.forwarder_server = ForwardServer(io_loop=self.forwarder_ioloop)
+        self.forwarder_server = ForwardServer()
         self.forwarder_server.bind_from_config_file(self.config_file)
 
-        self.forwarder_thread = threading.Thread(target=self.forwarder_ioloop.start)
-        self.forwarder_thread.start()
-
     def tearDown(self):
-        def stop_forwarder():
-            self.forwarder_server.stop()
-            self.forwarder_ioloop.stop()
-        self.forwarder_ioloop.add_callback(stop_forwarder)
-        self.forwarder_thread.join()
-        self.forwarder_ioloop.close(all_fds=True)
+        self.forwarder_server.stop()
+        self.echo_server.stop()
         os.remove(self.config_file)
-
-        def stop_echo_server():
-            self.echo_server.stop()
-            self.echo_ioloop.stop()
-        self.echo_ioloop.add_callback(stop_echo_server)
-        self.echo_thread.join()
-        self.echo_ioloop.close(all_fds=True)
-
         super(ForwarderIntegrationTest, self).tearDown()
 
+    @gen_test
     def test_ping(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect(('localhost', self.forwarder_port))
-        sock.sendall(b'Hello world!')
-        data = sock.recv(1024)
-        self.assertEqual(data, b'Hello world!')
+        stream = yield self.client.connect('localhost', self.forwarder_port)
+        with closing(stream):
+            stream.write(b'Hello')
+            data = yield stream.read_bytes(5)
+            self.assertEqual(data, b'Hello')
+
+    def test_config_reloaded(self):
+        with mock.patch.object(self.forwarder_server._config_reload_callback, 'callback') as callback:
+            self.io_loop.call_later(1, self.stop)
+            self.wait()
+            self.assertTrue(callback.called)
