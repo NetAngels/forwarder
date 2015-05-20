@@ -3,6 +3,7 @@ import functools
 import mock
 import os
 import tempfile
+import time
 
 from contextlib import closing
 from textwrap import dedent
@@ -265,6 +266,28 @@ class ForwarderIntegrationTest(AsyncTestCase):
             data = yield stream.read_bytes(5)
             self.assertEqual(data, b'Hello')
             self.assertEqual(self.echo_server.recived_data, b'Hello')
+
+    @gen_test
+    def test_connect_and_response_mulitibackend(self):
+        self.additional_servers.append(self.start_echo_server())
+        second_echo_server = self.additional_servers[0]
+        second_forwarder_port = self.get_unused_port()
+        self.config[('127.0.0.1', second_forwarder_port)] = ('127.0.0.1', second_echo_server.port)
+        time.sleep(1)  # workaround for forwarder fast config changes bug
+        make_config_file(self.config, self.config_file)
+        self.forwarder_server._handle_config_reload()
+
+        stream1 = yield self.client.connect('localhost', self.forwarder_port)
+        stream2 = yield self.client.connect('localhost', second_forwarder_port)
+
+        with closing(stream1):
+            with closing(stream2):
+                stream1.write(b'One')
+                stream2.write(b'Two')
+                data1 = yield stream1.read_bytes(3)
+                data2 = yield stream2.read_bytes(3)
+                self.assertEqual(data1, b'One')
+                self.assertEqual(data2, b'Two')
 
     def test_periodic_config_reload_calback(self):
         with mock.patch.object(self.forwarder_server._config_reload_callback, 'callback') as callback:
