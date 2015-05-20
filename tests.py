@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import functools
 import mock
 import os
 import tempfile
@@ -194,9 +195,26 @@ class ForwarderConfigTest(unittest.TestCase):
         self.assertEqual(mock.call(5000, '127.0.0.1'), unbind.call_args)
 
 
-class TCPEchoServer(TCPServer):
+class TestEchoServer(TCPServer):
+    def __init__(self, *args, **kwargs):
+        super(TestEchoServer, self).__init__(*args, **kwargs)
+        self.port = None
+        self.address = ""
+        self.recived_data = b""
+
+    def listen(self, port, address=""):
+        super(TestEchoServer, self).listen(port, address)
+        self.port = port
+        self.address = address
+
     def handle_stream(self, stream, address):
-        stream.read_until_close(lambda _: stream.close(), stream.write)
+        callback = lambda _: stream.close()
+        streaming_callback = functools.partial(self.handle_data, stream)
+        stream.read_until_close(callback, streaming_callback)
+
+    def handle_data(self, stream, data):
+        self.recived_data += data
+        stream.write(data)
 
 
 class ForwarderIntegrationTest(AsyncTestCase):
@@ -208,27 +226,36 @@ class ForwarderIntegrationTest(AsyncTestCase):
         super(ForwarderIntegrationTest, self).setUp()
 
         self.client = TCPClient()
-
-        # Set up echo TCP server
-        self.echo_server = TCPEchoServer()
-        sock, self.echo_port = bind_unused_port()
-        sock.close()
-        self.echo_server.listen(self.echo_port)
+        self.echo_server = self.start_echo_server()
+        self.additional_servers = []  # additional test servers
 
         # Set up forwarder
-        sock, self.forwarder_port = bind_unused_port()
-        sock.close()
-        self.config_file = make_config_file(
-            {('127.0.0.1', self.forwarder_port): ('127.0.0.1', self.echo_port)}
-        )
+        self.forwarder_port = self.get_unused_port()
+        self.config = {
+            ('127.0.0.1', self.forwarder_port): ('127.0.0.1', self.echo_server.port)
+        }
+        self.config_file = make_config_file(self.config)
         self.forwarder_server = ForwardServer()
         self.forwarder_server.bind_from_config_file(self.config_file)
 
     def tearDown(self):
         self.forwarder_server.stop()
         self.echo_server.stop()
+        for server in self.additional_servers:
+            server.stop()
         os.remove(self.config_file)
         super(ForwarderIntegrationTest, self).tearDown()
+
+    def start_echo_server(self):
+        server = TestEchoServer()
+        port = self.get_unused_port()
+        server.listen(port)
+        return server
+
+    def get_unused_port(self):
+        sock, port = bind_unused_port()
+        sock.close()
+        return port
 
     @gen_test
     def test_connect_and_response(self):
@@ -237,6 +264,7 @@ class ForwarderIntegrationTest(AsyncTestCase):
             stream.write(b'Hello')
             data = yield stream.read_bytes(5)
             self.assertEqual(data, b'Hello')
+            self.assertEqual(self.echo_server.recived_data, b'Hello')
 
     def test_periodic_config_reload_calback(self):
         with mock.patch.object(self.forwarder_server._config_reload_callback, 'callback') as callback:
