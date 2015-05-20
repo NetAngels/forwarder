@@ -17,7 +17,7 @@ except ImportError:
 from forwarder.utils import DictDiff
 
 
-def _get_forwarding_str(addr_from, port_from, addr_to, port_to):
+def get_forwarding_str(addr_from, port_from, addr_to, port_to):
     """
     Returns log string for connection forwarding.
     """
@@ -127,16 +127,16 @@ class ForwardServer(TCPServer):
             diff = DictDiff(self.conf, conf)
             for addr, port in diff.removed:
                 logging.info('Forwarding %s removed from config. Closing all connections on it.',
-                             _get_forwarding_str(addr, port, *self.conf[(addr, port)]))
+                             get_forwarding_str(addr, port, *self.conf[(addr, port)]))
                 self.close_connections((addr, port))
                 self.unbind(port, addr)
             for addr, port in diff.changed:
                 logging.info('Forwarding %s was changed in config. Reinitialize all connections on it',
-                             _get_forwarding_str(addr, port, *conf[(addr, port)]))
+                             get_forwarding_str(addr, port, *conf[(addr, port)]))
                 self.close_connections((addr, port))
             for addr, port in diff.added:
                 logging.info('New forwarding %s was added in config. Start listening on it',
-                             _get_forwarding_str(addr, port, *conf[(addr, port)]))
+                             get_forwarding_str(addr, port, *conf[(addr, port)]))
                 self.listen(port, addr)
             self.conf = conf
 
@@ -192,7 +192,7 @@ class ForwardConnection(object):
 
     def _on_remote_connected(self):
         ip_from = self.reverse_address[0]
-        fwd_str = _get_forwarding_str(self.address[0], self.address[1],
+        fwd_str = get_forwarding_str(self.address[0], self.address[1],
                                       self.remote_address[0], self.remote_address[1])
         logging.info('Connected ip: %s, forward %s', ip_from, fwd_str)
         self.remote_stream.read_until_close(self._on_remote_read_close, self.stream.write)

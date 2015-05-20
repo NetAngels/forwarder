@@ -1,17 +1,38 @@
 # -*- coding: utf-8 -*-
-from contextlib import closing
 import mock
 import os
 import tempfile
 
+from contextlib import closing
+from textwrap import dedent
 from tornado.tcpclient import TCPClient
 from tornado.tcpserver import TCPServer
 from tornado.testing import AsyncTestCase, bind_unused_port, unittest, gen_test
 
-from forwarder import ForwardServer, _get_forwarding_str, ParseError
+from forwarder import ForwardServer, get_forwarding_str, ParseError
 from forwarder.utils import DictDiff
 
 TEST_FILE_SUFFIX = '_fwdtest'
+
+
+def make_config_file(config, config_file=None):
+    """
+    Creates a configuration file with specified data. ``config`` must be a dict object
+    describing list of connections {('host_from', port_from): ('host_to', port_to),} or
+    a string with raw forwarder configuration data.
+    If optional ``config_file`` parameter is not set a new temproary file will be generated.
+    Returns ``config_file`` - system path of written configuration file.
+    """
+    if not config_file:
+        config_file = tempfile.mkstemp(TEST_FILE_SUFFIX)[1]
+    with open(config_file, 'w') as f:
+        if isinstance(config, dict):
+            for k in config:
+                v = config[k]
+                f.write('{0}\n'.format(get_forwarding_str(k[0], k[1], v[0], v[1])))
+        else:
+            f.write(config)
+    return config_file
 
 
 class DictDiffTest(unittest.TestCase):
@@ -51,16 +72,17 @@ class ForwarderConfigTest(unittest.TestCase):
         self.forwarder_server = ForwardServer()
 
     def test_get_forwarding_str(self):
-        s = _get_forwarding_str('1.2.3.4', 21, '5.6.7.8', 22)
+        s = get_forwarding_str('1.2.3.4', 21, '5.6.7.8', 22)
         self.assertEqual("1.2.3.4:21 => 5.6.7.8:22", s)
 
     def test_parse_config_files(self):
-        config_file = tempfile.mkstemp(TEST_FILE_SUFFIX)[1]
-        with open(config_file, 'w') as f:
-            f.write('127.0.0.1:5000 => 127.0.0.1:5001\n')
-            f.write('127.0.0.1:5002, 127.0.0.1:5003\n')
-            f.write('#127.0.0.1:5004 => 127.0.0.1:5005\n')
-            f.write('127.0.0.1:5006    127.0.0.1:5007\n')
+        config = dedent('''
+            127.0.0.1:5000 => 127.0.0.1:5001
+            127.0.0.1:5002, 127.0.0.1:5003
+            #127.0.0.1:5004 => 127.0.0.1:5005
+            127.0.0.1:5006    127.0.0.1:5007
+        ''')
+        config_file = make_config_file(config)
         conf = {
             ('127.0.0.1', 5000): ('127.0.0.1', 5001),
             ('127.0.0.1', 5002): ('127.0.0.1', 5003),
@@ -70,13 +92,13 @@ class ForwarderConfigTest(unittest.TestCase):
         self.assertEqual(parsedconf, conf)
 
     def test_parse_config_string(self):
-        data = '''
-127.0.0.1:5000 => 127.0.0.1:5001
-127.0.0.1:5002, 127.0.0.1:5003
+        data = dedent('''
+            127.0.0.1:5000 => 127.0.0.1:5001
+            127.0.0.1:5002, 127.0.0.1:5003
 
-#127.0.0.1:5004 => 127.0.0.1:5005
-127.0.0.1:5006    127.0.0.1:5007
-'''
+            #127.0.0.1:5004 => 127.0.0.1:5005
+            127.0.0.1:5006    127.0.0.1:5007
+        ''')
         conf = {
             ('127.0.0.1', 5000): ('127.0.0.1', 5001),
             ('127.0.0.1', 5002): ('127.0.0.1', 5003),
@@ -86,20 +108,18 @@ class ForwarderConfigTest(unittest.TestCase):
         self.assertEqual(parsedconf, conf)
 
     def test_parse_config_fails(self):
-        data = '''
-127.0.0.1:5000 => 127.0.0.1:5001
-bad config
-127.0.0.1:5002 => 127.0.0.1:5001
-'''
+        data = dedent('''
+            127.0.0.1:5000 => 127.0.0.1:5001
+            bad config
+            127.0.0.1:5002 => 127.0.0.1:5001
+        ''')
         self.assertRaises(ParseError, self.forwarder_server.parse_config, data=data)
 
     @mock.patch('forwarder.ForwardServer.bind_conf')
     def test_handle_config_reload(self, bind_conf):
         d = tempfile.mkdtemp(TEST_FILE_SUFFIX)
-        with open(os.path.join(d, '0.conf'), 'w') as f:
-            f.write('127.0.0.1:5000 => 127.0.0.1:5001\n')
-        with open(os.path.join(d, '2.conf'), 'w') as f:
-            f.write('127.0.0.1:5002 => 127.0.0.1:5003\n')
+        make_config_file({('127.0.0.1', 5000): ('127.0.0.1', 5001)}, os.path.join(d, '0.conf'))
+        make_config_file({('127.0.0.1', 5002): ('127.0.0.1', 5003)}, os.path.join(d, '1.conf'))
         conf = {
             ('127.0.0.1', 5000): ('127.0.0.1', 5001),
             ('127.0.0.1', 5002): ('127.0.0.1', 5003),
@@ -113,8 +133,7 @@ bad config
         self.forwarder_server._handle_config_reload()
         self.assertEqual(bind_conf.call_count, 1)
 
-        with open(os.path.join(d, '3.conf'), 'w') as f:
-            f.write('127.0.0.1:5004 => 127.0.0.1:5005\n')
+        make_config_file({('127.0.0.1', 5004): ('127.0.0.1', 5005)}, os.path.join(d, '2.conf'))
         conf = {
             ('127.0.0.1', 5000): ('127.0.0.1', 5001),
             ('127.0.0.1', 5002): ('127.0.0.1', 5003),
@@ -128,10 +147,8 @@ bad config
     @mock.patch('forwarder.ForwardServer.bind_conf')
     def test_handle_config_reload_dir(self, bind_conf):
         d = tempfile.mkdtemp(TEST_FILE_SUFFIX)
-        with open(os.path.join(d, '0.conf'), 'w') as f:
-            f.write('127.0.0.1:5000 => 127.0.0.1:5001\n')
-        with open(os.path.join(d, '1.conf'), 'w') as f:
-            f.write('127.0.0.1:5002 => 127.0.0.1:5003\n')
+        make_config_file({('127.0.0.1', 5000): ('127.0.0.1', 5001)}, os.path.join(d, '0.conf'))
+        make_config_file({('127.0.0.1', 5002): ('127.0.0.1', 5003)}, os.path.join(d, '1.conf'))
         conf = {
             ('127.0.0.1', 5000): ('127.0.0.1', 5001),
             ('127.0.0.1', 5002): ('127.0.0.1', 5003),
@@ -201,9 +218,9 @@ class ForwarderIntegrationTest(AsyncTestCase):
         # Set up forwarder
         sock, self.forwarder_port = bind_unused_port()
         sock.close()
-        self.config_file = tempfile.mkstemp(TEST_FILE_SUFFIX)[1]
-        with open(self.config_file, 'w') as f:
-            f.write('127.0.0.1:{0} => 127.0.0.1:{1}'.format(self.forwarder_port, self.echo_port))
+        self.config_file = make_config_file(
+            {('127.0.0.1', self.forwarder_port): ('127.0.0.1', self.echo_port)}
+        )
         self.forwarder_server = ForwardServer()
         self.forwarder_server.bind_from_config_file(self.config_file)
 
@@ -214,14 +231,14 @@ class ForwarderIntegrationTest(AsyncTestCase):
         super(ForwarderIntegrationTest, self).tearDown()
 
     @gen_test
-    def test_ping(self):
+    def test_connect_and_response(self):
         stream = yield self.client.connect('localhost', self.forwarder_port)
         with closing(stream):
             stream.write(b'Hello')
             data = yield stream.read_bytes(5)
             self.assertEqual(data, b'Hello')
 
-    def test_config_reloaded(self):
+    def test_periodic_config_reload_calback(self):
         with mock.patch.object(self.forwarder_server._config_reload_callback, 'callback') as callback:
             self.io_loop.call_later(1, self.stop)
             self.wait()
